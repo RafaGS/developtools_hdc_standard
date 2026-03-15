@@ -1,3 +1,9 @@
+# Adaptación de HCD para que compile en ArchLinux
+
+Más información en:
+
+https://minibots.wordpress.com/2026/03/15/openharmony-device-connector-en-archlinux/
+
 # HDC-OpenHarmony Device Connector<a name="EN-US_TOPIC_0000001149090043"></a>
 
 - [HDC-OpenHarmony Device Connector<a name="EN-US_TOPIC_0000001149090043"></a>](#hdc-OpenHarmony-Device-Connector)
