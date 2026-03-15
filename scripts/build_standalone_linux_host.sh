@@ -31,12 +31,15 @@ fi
 
 STATICLIB=""
 INCLUDES=""
+EXTRA_OBJS=""
 
 function build_libusb ()
 {
 	libusb_install=$(realpath libusb)
 	[ "X$KEEP" == "X" ] && mkdir -pv ${libusb_install}/include && ln -svf /usr/include/libusb-1.0 ${libusb_install}/include/libusb
-	INCLUDES+="-I$(realpath ${libusb_install}/include) "
+	# Keep both include roots to support projects that include either
+	# <libusb/libusb.h> or <libusb.h>.
+	INCLUDES+="-I$(realpath ${libusb_install}/include) -I$(realpath ${libusb_install}/include/libusb) "
 }
 
 function build_openssl ()
@@ -51,8 +54,24 @@ function build_openssl ()
 function build_libuv ()
 {
 	pushd third_party_libuv
-	[ "X$KEEP" == "X" ] && cmake . && make
-	STATICLIB+="$(realpath libuv_a.a) "
+	# Newer toolchains can fail linking libuv benchmark/test targets.
+	# We only need libuv_a.a for hdc_std, so disable tests and build uv_a.
+	[ "X$KEEP" == "X" ] && cmake -DBUILD_TESTING=OFF -DLIBUV_BUILD_TESTS=OFF -DLIBUV_BUILD_BENCH=OFF . && make uv_a
+	if [ -f "libuv_a.a" ]; then
+		STATICLIB+="$(realpath libuv_a.a) "
+	elif [ -f "libuv.a" ]; then
+		STATICLIB+="$(realpath libuv.a) "
+	else
+		echo "libuv static library not found (expected libuv_a.a or libuv.a)"
+		exit 1
+	fi
+
+	# OHOS libuv fork may reference log/trace symbols that are not archived into
+	# libuv.a by this CMake path on Linux; compile them explicitly for final link.
+	cc -c src/unix/log_unix.c -Iinclude -Isrc -o log_unix.o
+	cc -c src/unix/trace_unix.c -Iinclude -Isrc -o trace_unix.o
+	EXTRA_OBJS+="$(realpath log_unix.o) $(realpath trace_unix.o) "
+
 	INCLUDES+="-I$(realpath include) "
 	popd
 }
@@ -81,11 +100,42 @@ function build_hdc ()
 	echo $STATICLIB
 	echo $INCLUDES
 
+	INCLUDES+="-I$(realpath src/common) -I$(realpath src/host) -I$(realpath src/daemon) "
+
 	DEFINES="-DHDC_HOST -DHARMONY_PROJECT"
 	export LDFLAGS="-Wl,--copy-dt-needed-entries"
 	export CXXFLAGS="-std=c++17 -ggdb -O0"
 
-	g++ ${DEFINES} ${CXXFLAGS} ${INCLUDES} $(find src/common/ src/host/ \( -name "*.cpp" -or -name "*.c" \)) -lusb-1.0 -ldl -lpthread $STATICLIB -o hdc_std
+	COMMON_SOURCES=(
+		src/common/async_cmd.cpp
+		src/common/auth.cpp
+		src/common/base.cpp
+		src/common/channel.cpp
+		src/common/debug.cpp
+		src/common/file.cpp
+		src/common/file_descriptor.cpp
+		src/common/forward.cpp
+		src/common/session.cpp
+		src/common/task.cpp
+		src/common/tcp.cpp
+		src/common/transfer.cpp
+		src/common/usb.cpp
+	)
+
+	HOST_SOURCES=(
+		src/host/client.cpp
+		src/host/host_app.cpp
+		src/host/host_forward.cpp
+		src/host/host_tcp.cpp
+		src/host/host_unity.cpp
+		src/host/host_usb.cpp
+		src/host/main.cpp
+		src/host/server.cpp
+		src/host/server_for_client.cpp
+		src/host/translate.cpp
+	)
+
+	g++ ${DEFINES} ${CXXFLAGS} ${INCLUDES} "${COMMON_SOURCES[@]}" "${HOST_SOURCES[@]}" $EXTRA_OBJS -lusb-1.0 -ldl -lpthread $STATICLIB -o hdc_std
 
 	if [ -f hdc_std ]; then
 		echo build success
