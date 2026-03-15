@@ -1,4 +1,4 @@
-# Adaptación de HCD para que compile en ArchLinux
+# Adaptación de HDC para que compile en ArchLinux
 
 Más información en:
 
