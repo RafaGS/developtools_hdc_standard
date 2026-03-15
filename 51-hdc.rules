@@ -1,0 +1,2 @@
+# OpenHarmony HDC USB access for Rockchip/Cix devices
+SUBSYSTEM=="usb", ATTR{idVendor}=="2207", MODE="0660", GROUP="plugdev", TAG+="uaccess"
